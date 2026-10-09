@@ -30,6 +30,11 @@ for target in linux/amd64 linux/arm64 darwin/arm64 darwin/amd64; do
   echo "  ✓ $out"
 done
 
-cd dist && shasum -a 256 imageRepos-* > SHA256SUMS && cd ..
+# macOS 用 shasum，Linux 用 sha256sum
+if command -v sha256sum >/dev/null 2>&1; then
+  (cd dist && sha256sum imageRepos-* > SHA256SUMS)
+else
+  (cd dist && shasum -a 256 imageRepos-* > SHA256SUMS)
+fi
 echo
 echo "完成。校验和写入 dist/SHA256SUMS"

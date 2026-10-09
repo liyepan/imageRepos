@@ -12,9 +12,15 @@ if ! command -v python3 >/dev/null 2>&1; then
   echo "需要 python3（只用标准库解析 JSON）"; exit 1
 fi
 
-BIN=./dist/imageRepos-darwin-arm64
-[ -x "$BIN" ] || BIN=./dist/imageRepos-linux-amd64
-[ -x "$BIN" ] || { echo "找不到二进制，先跑 ./build.sh"; exit 1; }
+case "$(uname -s)-$(uname -m)" in
+  Darwin-arm64)              BIN=./dist/imageRepos-darwin-arm64 ;;
+  Darwin-x86_64)             BIN=./dist/imageRepos-darwin-amd64 ;;
+  Linux-x86_64)              BIN=./dist/imageRepos-linux-amd64 ;;
+  Linux-aarch64|Linux-arm64) BIN=./dist/imageRepos-linux-arm64 ;;
+  *) echo "不认识的平台: $(uname -s)-$(uname -m)"; exit 1 ;;
+esac
+[ -x "$BIN" ] || { echo "找不到 $BIN，先跑 ./build.sh"; exit 1; }
+echo "测试目标: $BIN"
 
 DATA=$PWD/.testdata
 PORT=18080

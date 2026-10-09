@@ -1,0 +1,6 @@
+# 别把这些塞进 Docker 构建上下文
+.git
+.github
+.build-cache
+dist/*.tar.gz
+dist/data

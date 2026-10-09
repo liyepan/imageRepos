@@ -15,6 +15,10 @@ import (
 	"strings"
 	"syscall"
 	"time"
+
+	// 把时区数据库编进二进制。
+	// scratch 镜像里没有 /usr/share/zoneinfo，不这样做 TZ=Asia/Shanghai 不会生效。
+	_ "time/tzdata"
 )
 
 //go:embed web

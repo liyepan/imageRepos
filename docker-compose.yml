@@ -1,0 +1,38 @@
+# imageRepos —— 下载发行包之后跟着用这个
+#
+#   1. 下载对应架构的镜像包：imageRepos-docker-amd64.tar.gz
+#      （服务器上 uname -m 看一下：x86_64 用 amd64，aarch64 用 arm64）
+#   2. 导入镜像：  docker load -i imageRepos-docker-amd64.tar.gz
+#   3. 改下面的 PASSWORD
+#   4. 启动：      docker compose up -d
+#   5. 打开 http://服务器IP:8080
+
+services:
+  imageRepos:
+    image: imageRepos:latest
+    container_name: imageRepos
+    restart: unless-stopped
+
+    ports:
+      # 左边是服务器端口，被占用了就改左边
+      - "8080:8080"
+
+    environment:
+      # 【必填】登录密码
+      PASSWORD: "改成一个你自己的密码"
+
+      # 时区
+      TZ: "Asia/Shanghai"
+
+      # 【选填】留空会自动生成一个，写进 /data/.apitoken，可在网页右上角查看
+      # API_TOKEN: ""
+
+      # 【选填】图片外链的域名前缀。挂了域名就填上，不填则按请求头自动推断
+      # PUBLIC_BASE: "https://img.example.com"
+
+      # 【选填】单个文件大小上限（MB），默认 20
+      # MAX_MB: "20"
+
+    volumes:
+      # 左边是宿主机目录，图片和索引都在这里，备份就是拷这个目录
+      - ./data:/data

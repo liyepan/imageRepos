@@ -1,0 +1,119 @@
+name: 构建并发布
+
+# 什么时候跑：
+#   push 到 main  -> 更新滚动发行版 latest
+#   push v* 标签  -> 发正式版本，例如 v1.0.0
+#   手动触发       -> 走 latest
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+  workflow_dispatch:
+
+# 建 Release 需要写权限
+permissions:
+  contents: write
+
+jobs:
+  # ---------- 第一步：编译 + 打包 ----------
+  build:
+    name: 编译并打包
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          # 项目零第三方依赖，没有 go.sum 可缓存
+          cache: false
+
+      - name: 编译四个平台的二进制
+        run: ./build.sh
+
+      - name: 跑端到端回归测试
+        run: ./e2e-test.sh
+
+      - name: 打包 Docker 镜像为 tar.gz
+        run: |
+          set -euo pipefail
+          for arch in amd64 arm64; do
+            docker build --build-arg TARGETARCH=$arch -t imageRepos:latest .
+            docker save imageRepos:latest | gzip -9 > dist/imageRepos-docker-$arch.tar.gz
+            echo "已打包 imageRepos-docker-$arch.tar.gz"
+          done
+          ls -lh dist/
+
+      - name: 把 compose 文件放进发行物
+        run: cp docker-compose.yml dist/docker-compose.yml
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: imageRepos-dist
+          path: |
+            dist/imageRepos-*
+            dist/docker-compose.yml
+          if-no-files-found: error
+
+  # ---------- 第二步：发到 Releases ----------
+  release:
+    name: 发布到 Releases
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: imageRepos-dist
+          path: dist
+
+      - name: 生成 SHA256SUMS
+        run: |
+          cd dist
+          sha256sum imageRepos-* docker-compose.yml > SHA256SUMS
+          cat SHA256SUMS
+
+      - name: 创建或更新发行版
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          REF_TYPE: ${{ github.ref_type }}
+          REF_NAME: ${{ github.ref_name }}
+          SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+
+          if [ "$REF_TYPE" = "tag" ]; then
+            TAG="$REF_NAME"
+            TITLE="imageRepos $REF_NAME"
+          else
+            TAG="latest"
+            TITLE="imageRepos latest (rolling)"
+          fi
+
+          NOTES=$(printf '%s\n' \
+            "构建自 commit $SHA" \
+            "时间 $(date -u '+%Y-%m-%d %H:%M UTC')" \
+            "" \
+            "## Docker 用法（推荐）" \
+            "" \
+            "    uname -m   查看架构：x86_64 用 amd64，aarch64 用 arm64" \
+            "    docker load -i imageRepos-docker-amd64.tar.gz" \
+            "    改好 docker-compose.yml 里的 PASSWORD" \
+            "    docker compose up -d" \
+            "" \
+            "## 直接跑二进制" \
+            "" \
+            "    chmod +x imageRepos-linux-amd64" \
+            "    PASSWORD=你的密码 ./imageRepos-linux-amd64" \
+            "" \
+            "图片和数据都在挂载目录里，备份就是拷那一个目录。")
+
+          if gh release view "$TAG" --repo "$REPO" >/dev/null 2>&1; then
+            echo "→ 更新已有发行版 $TAG"
+            gh release upload "$TAG" dist/* --clobber --repo "$REPO"
+          else
+            echo "→ 新建发行版 $TAG"
+            gh release create "$TAG" --repo "$REPO" --title "$TITLE" --notes "$NOTES" dist/*
+          fi
+
+          echo "→ 完成，共 $(ls dist | wc -l) 个文件"
