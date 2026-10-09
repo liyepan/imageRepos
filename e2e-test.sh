@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# imghost 端到端回归测试
+# imageRepos 端到端回归测试
 #
 #   ./e2e-test.sh
 #
@@ -12,8 +12,8 @@ if ! command -v python3 >/dev/null 2>&1; then
   echo "需要 python3（只用标准库解析 JSON）"; exit 1
 fi
 
-BIN=./dist/imghost-darwin-arm64
-[ -x "$BIN" ] || BIN=./dist/imghost-linux-amd64
+BIN=./dist/imageRepos-darwin-arm64
+[ -x "$BIN" ] || BIN=./dist/imageRepos-linux-amd64
 [ -x "$BIN" ] || { echo "找不到二进制，先跑 ./build.sh"; exit 1; }
 
 DATA=$PWD/.testdata

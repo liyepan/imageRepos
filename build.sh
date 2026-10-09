@@ -25,11 +25,11 @@ echo "用 $($GO version) 构建"
 for target in linux/amd64 linux/arm64 darwin/arm64 darwin/amd64; do
   os="${target%%/*}"
   arch="${target##*/}"
-  out="dist/imghost-${os}-${arch}"
+  out="dist/imageRepos-${os}-${arch}"
   GOOS="$os" GOARCH="$arch" "$GO" build -trimpath -ldflags "-s -w" -o "$out" .
   echo "  ✓ $out"
 done
 
-cd dist && shasum -a 256 imghost-* > SHA256SUMS && cd ..
+cd dist && shasum -a 256 imageRepos-* > SHA256SUMS && cd ..
 echo
 echo "完成。校验和写入 dist/SHA256SUMS"

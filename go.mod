@@ -1,3 +1,3 @@
-module imghost
+module imageRepos
 
 go 1.22

@@ -14,7 +14,7 @@ import (
 )
 
 const (
-	cookieName = "imghost_session"
+	cookieName = "imageRepos_session"
 	sessionTTL = 30 * 24 * time.Hour
 	maxFails   = 8
 	lockout    = 5 * time.Minute

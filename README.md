@@ -1,4 +1,4 @@
-# imghost
+# imageRepos
 
 一个只给自己用的图床。**单个可执行文件，零依赖，图片存在本地目录。**
 
@@ -28,7 +28,7 @@
 
 ```bash
 cd imageRepos
-PASSWORD=你的密码 ./dist/imghost-darwin-arm64
+PASSWORD=你的密码 ./dist/imageRepos-darwin-arm64
 ```
 
 打开 <http://localhost:8080>，输入密码登录，然后直接把截图 `⌘V` 粘进页面。
@@ -36,7 +36,7 @@ PASSWORD=你的密码 ./dist/imghost-darwin-arm64
 数据（图片 + 索引）默认写在当前目录的 `data/` 下。想换地方就加 `DATA_DIR`：
 
 ```bash
-PASSWORD=你的密码 DATA_DIR=~/Pictures/imghost ./dist/imghost-darwin-arm64
+PASSWORD=你的密码 DATA_DIR=~/Pictures/imageRepos ./dist/imageRepos-darwin-arm64
 ```
 
 第一次启动时终端会打印一个 API Token，也可以在网页右上角的「API Token」按钮里看。
@@ -51,39 +51,39 @@ PASSWORD=你的密码 DATA_DIR=~/Pictures/imghost ./dist/imghost-darwin-arm64
 
 ```bash
 uname -m
-#   x86_64  → 用 imghost-linux-amd64
-#   aarch64 → 用 imghost-linux-arm64
+#   x86_64  → 用 imageRepos-linux-amd64
+#   aarch64 → 用 imageRepos-linux-arm64
 ```
 
 ```bash
-scp dist/imghost-linux-amd64 你的用户名@服务器IP:~/
+scp dist/imageRepos-linux-amd64 你的用户名@服务器IP:~/
 ```
 
 ### 2. 建数据目录并试跑
 
 ```bash
-mkdir -p ~/imghost-data
-PASSWORD=你的密码 DATA_DIR=~/imghost-data ~/imghost-linux-amd64
+mkdir -p ~/imageRepos-data
+PASSWORD=你的密码 DATA_DIR=~/imageRepos-data ~/imageRepos-linux-amd64
 ```
 
 能起来、能打开 `http://服务器IP:8080` 就说明没问题，`Ctrl+C` 停掉。
 
 ### 3. 用 systemd 常驻
 
-写一个 unit 文件 `/etc/systemd/system/imghost.service`：
+写一个 unit 文件 `/etc/systemd/system/imageRepos.service`：
 
 ```ini
 [Unit]
-Description=imghost 图床
+Description=imageRepos 图床
 After=network.target
 
 [Service]
 Type=simple
 User=你的用户名
 Environment=PASSWORD=你的密码
-Environment=DATA_DIR=/home/你的用户名/imghost-data
+Environment=DATA_DIR=/home/你的用户名/imageRepos-data
 Environment=PUBLIC_BASE=https://img.example.com
-ExecStart=/home/你的用户名/imghost-linux-amd64
+ExecStart=/home/你的用户名/imageRepos-linux-amd64
 Restart=always
 RestartSec=3
 
@@ -92,19 +92,19 @@ WantedBy=multi-user.target
 ```
 
 ```bash
-sudo chmod 600 /etc/systemd/system/imghost.service   # 里面有密码
+sudo chmod 600 /etc/systemd/system/imageRepos.service   # 里面有密码
 sudo systemctl daemon-reload
-sudo systemctl enable --now imghost
-sudo systemctl status imghost
+sudo systemctl enable --now imageRepos
+sudo systemctl status imageRepos
 ```
 
 看实时日志：
 
 ```bash
-journalctl -u imghost -f
+journalctl -u imageRepos -f
 ```
 
-以后换新版本就是：传新二进制上去 → `sudo systemctl restart imghost`。
+以后换新版本就是：传新二进制上去 → `sudo systemctl restart imageRepos`。
 
 > 程序不监听外网也行，把 `[Service]` 里加一句 `Environment=ADDR=127.0.0.1:8080`，
 > 只让本机的 Nginx/Caddy 反代进来，更安全。
@@ -294,7 +294,7 @@ DATA_DIR/
 **备份 = 打包这一个目录**：
 
 ```bash
-tar czf imghost-backup-$(date +%F).tar.gz -C ~/imghost-data .
+tar czf imageRepos-backup-$(date +%F).tar.gz -C ~/imageRepos-data .
 ```
 
 索引是纯文本 JSON，能直接看、直接 grep，坏了也能手工修。

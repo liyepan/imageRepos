@@ -61,7 +61,7 @@ func permHint(dir string) string {
 	return "\n\n  程序需要对 " + dir + " 有写权限。" +
 		"\n  看看这个目录归谁、权限是什么：" +
 		"\n      ls -ld " + dir +
-		"\n  或者换个有权限的位置重跑：DATA_DIR=/别的路径 ./imghost"
+		"\n  或者换个有权限的位置重跑：DATA_DIR=/别的路径 ./imageRepos"
 }
 
 func loadOrCreateSecret(path string) ([]byte, error) {
@@ -97,7 +97,7 @@ func loadOrCreateToken(path string) (string, bool, error) {
 
 func main() {
 	log.SetFlags(log.LstdFlags)
-	log.SetPrefix("[imghost] ")
+	log.SetPrefix("[imageRepos] ")
 
 	dataDir := envStr("DATA_DIR", "./data")
 	filesDir := filepath.Join(dataDir, "files")
@@ -165,7 +165,7 @@ func main() {
 	if strings.HasPrefix(addr, ":") {
 		addr = "localhost" + addr
 	}
-	log.Printf("imghost %s", version)
+	log.Printf("imageRepos %s", version)
 	log.Printf("  数据目录  : %s", cfg.DataDir)
 	log.Printf("  图片目录  : %s", cfg.FilesDir)
 	log.Printf("  单文件上限: %d MB", cfg.MaxBytes>>20)
