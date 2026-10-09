@@ -1,0 +1,11 @@
+# 编译缓存（放项目里，不污染系统目录和 /tmp）
+.build-cache/
+
+# 运行时数据：图片、索引、密钥。绝对不该进版本库
+data/
+dist/data/
+
+# 测试用的临时实例
+.testdata/
+
+.DS_Store

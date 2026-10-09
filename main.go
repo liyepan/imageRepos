@@ -56,6 +56,14 @@ func envInt(key string, def int) int {
 	return def
 }
 
+// permHint 数据目录不可写时给一句人话，别让人对着 "permission denied" 发呆
+func permHint(dir string) string {
+	return "\n\n  程序需要对 " + dir + " 有写权限。" +
+		"\n  看看这个目录归谁、权限是什么：" +
+		"\n      ls -ld " + dir +
+		"\n  或者换个有权限的位置重跑：DATA_DIR=/别的路径 ./imghost"
+}
+
 func loadOrCreateSecret(path string) ([]byte, error) {
 	if b, err := os.ReadFile(path); err == nil && len(b) >= 32 {
 		return b[:32], nil
@@ -107,8 +115,14 @@ func main() {
 		log.Fatal("缺少环境变量 PASSWORD —— 请设置登录密码后重试")
 	}
 	if err := os.MkdirAll(filesDir, 0o755); err != nil {
-		log.Fatalf("无法创建数据目录 %s: %v", filesDir, err)
+		log.Fatalf("无法创建数据目录 %s: %v%s", filesDir, err, permHint(dataDir))
 	}
+	// 提前确认真的写得进去，别等用户传图的时候才报权限错
+	probe := filepath.Join(filesDir, ".write-test")
+	if err := os.WriteFile(probe, []byte("ok"), 0o644); err != nil {
+		log.Fatalf("数据目录不可写: %s: %v%s", filesDir, err, permHint(dataDir))
+	}
+	_ = os.Remove(probe)
 
 	secret, err := loadOrCreateSecret(filepath.Join(dataDir, ".secret"))
 	if err != nil {

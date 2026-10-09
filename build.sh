@@ -3,19 +3,21 @@
 set -euo pipefail
 cd "$(dirname "$0")"
 
-if command -v go >/dev/null 2>&1; then
-  GO=go
-elif [ -x "$PWD/.tools/go/bin/go" ]; then
-  GO="$PWD/.tools/go/bin/go"      # 项目自带的工具链
-else
-  echo "找不到 Go。装一个（brew install go），或者把工具链解压到 .tools/go/"
+if ! command -v go >/dev/null 2>&1; then
+  echo "找不到 Go。装一个：brew install go"
   exit 1
 fi
+GO=go
 
+# 编译缓存就放在项目目录里，不往 ~/Library/Caches 或 /tmp 扔东西。
+# 整个项目零第三方依赖，所以构建过程完全不需要联网。
 export CGO_ENABLED=0
-export GOPROXY=off
-export GOCACHE="$PWD/.tools/gocache"
-export GOMODCACHE="$PWD/.tools/gomodcache"
+export GOCACHE="$PWD/.build-cache/go-build"
+export GOMODCACHE="$PWD/.build-cache/go-mod"
+mkdir -p "$GOCACHE" "$GOMODCACHE"
+
+# 以后要是引入了外部包，记得先设：
+#   export GOPROXY=https://goproxy.cn,direct    # 你这边 proxy.golang.org 不通
 
 mkdir -p dist
 
