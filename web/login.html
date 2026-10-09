@@ -1,0 +1,78 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>登录 · 图床</title>
+<style>
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; min-height: 100vh; display: flex; align-items: center; justify-content: center;
+    background: #0f1115; color: #e6e8ee; padding: 24px;
+    font: 15px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+  }
+  .card {
+    width: 100%; max-width: 340px; background: #171a21; border: 1px solid #262b36;
+    border-radius: 16px; padding: 32px 28px; box-shadow: 0 20px 60px rgba(0,0,0,.45);
+  }
+  h1 { margin: 0 0 6px; font-size: 22px; letter-spacing: .5px; }
+  .sub { margin: 0 0 22px; color: #8b93a7; font-size: 13px; }
+  input {
+    width: 100%; padding: 12px 14px; border-radius: 10px; border: 1px solid #2c3340;
+    background: #0f1115; color: #e6e8ee; font-size: 15px; outline: none; transition: border-color .15s;
+  }
+  input:focus { border-color: #4c7dff; }
+  button {
+    width: 100%; margin-top: 14px; padding: 12px; border: 0; border-radius: 10px;
+    background: #4c7dff; color: #fff; font-size: 15px; font-weight: 600; cursor: pointer;
+  }
+  button:hover { background: #3d6cf0; }
+  button:disabled { opacity: .6; cursor: default; }
+  .err { margin-top: 12px; min-height: 18px; color: #ff6b6b; font-size: 13px; }
+</style>
+</head>
+<body>
+<form class="card" id="f">
+  <h1>🖼️ 图床</h1>
+  <p class="sub">输入密码进入</p>
+  <input id="pw" type="password" placeholder="密码" autocomplete="current-password" autofocus>
+  <button type="submit" id="btn">登录</button>
+  <div class="err" id="err"></div>
+</form>
+<script>
+(function () {
+  var f = document.getElementById('f');
+  var pw = document.getElementById('pw');
+  var err = document.getElementById('err');
+  var btn = document.getElementById('btn');
+
+  f.addEventListener('submit', function (e) {
+    e.preventDefault();
+    err.textContent = '';
+    btn.disabled = true;
+    btn.textContent = '登录中…';
+    fetch('/api/login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ password: pw.value })
+    }).then(function (r) {
+      return r.json().then(function (d) { return { ok: r.ok, d: d }; });
+    }).then(function (res) {
+      if (res.ok && res.d && res.d.success) {
+        location.href = '/';
+        return;
+      }
+      err.textContent = (res.d && res.d.message) || '登录失败';
+      btn.disabled = false;
+      btn.textContent = '登录';
+      pw.select();
+    }).catch(function () {
+      err.textContent = '网络错误';
+      btn.disabled = false;
+      btn.textContent = '登录';
+    });
+  });
+})();
+</script>
+</body>
+</html>

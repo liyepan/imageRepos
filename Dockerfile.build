@@ -1,0 +1,19 @@
+# 从源码构建的版本（需要能访问 Docker Hub 拉 golang / alpine 镜像）
+#   docker build -f Dockerfile.build -t imghost:1.0.0 .
+
+FROM golang:1.24-alpine AS build
+WORKDIR /src
+ENV CGO_ENABLED=0 GOOS=linux
+COPY go.mod ./
+COPY *.go ./
+COPY web ./web
+RUN go build -trimpath -ldflags "-s -w" -o /out/imghost .
+
+FROM scratch
+COPY --from=build /out/imghost /imghost
+ENV DATA_DIR=/data \
+    ADDR=:8080
+VOLUME ["/data"]
+EXPOSE 8080
+USER 65532:65532
+ENTRYPOINT ["/imghost"]

@@ -1,0 +1,38 @@
+services:
+  imghost:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        # 服务器是 amd64 就保持 amd64；甲骨文 ARM / 树莓派 / M 系 Mac 改成 arm64
+        ARCH: amd64
+    image: imghost:1.0.0
+    container_name: imghost
+    restart: unless-stopped
+
+    ports:
+      # 左边是服务器端口，右边是容器端口，按需改左边
+      - "8080:8080"
+
+    environment:
+      # 【必填】登录密码
+      PASSWORD: "change-me"
+
+      # 【选填】留空会自动生成一个，并写进 /data/.apitoken，可在网页右上角查看
+      # API_TOKEN: ""
+
+      # 【选填】图片外链的域名前缀。不填就用请求里的 Host 自动推断
+      # 如果你挂在 https://img.example.com 后面，填上更稳妥
+      # PUBLIC_BASE: "https://img.example.com"
+
+      # 【选填】单个文件大小上限（MB），默认 20
+      # MAX_MB: "20"
+
+      TZ: "Asia/Shanghai"
+
+    volumes:
+      # 左边改成你服务器上的目录，图片和索引都在这里
+      - /your/server/path:/data
+
+    # 如果你不想处理目录权限，取消下面这行的注释，用 root 跑
+    # user: "0:0"
