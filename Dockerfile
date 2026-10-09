@@ -3,14 +3,17 @@
 # 基础镜像用 scratch —— 不需要从任何 registry 拉取，Docker Hub 不通的环境也能构建。
 # 镜像里只有一个静态二进制，没有 shell、没有包管理器、没有多余的东西。
 #
-#   docker build -t imageRepos:latest .
-#   docker save imageRepos:latest | gzip > imageRepos-docker.tar.gz
+#   docker build -t imagerepos:latest .
+#   docker save imagerepos:latest | gzip > imageRepos-docker.tar.gz
+#
+# 注意镜像名必须全小写，Docker 不接受大写字母的仓库名。
 
 FROM scratch
 
-# amd64 / arm64。buildx 会自动填 TARGETARCH，普通 docker build 用 --build-arg 传
-ARG TARGETARCH=amd64
-COPY dist/imageRepos-linux-${TARGETARCH} /imageRepos
+# amd64 / arm64，构建时用 --build-arg ARCH=xxx 传。
+# 不用 TARGETARCH 这个名字：它是 BuildKit 的保留参数，手动传值会打架。
+ARG ARCH=amd64
+COPY dist/imageRepos-linux-${ARCH} /imageRepos
 
 # TZ 能生效是因为 main.go 里 import 了 time/tzdata，时区库编进二进制了
 ENV DATA_DIR=/data \

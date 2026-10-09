@@ -37,9 +37,16 @@ jobs:
       - name: 打包 Docker 镜像为 tar.gz
         run: |
           set -euo pipefail
+
+          # 镜像仓库名必须全小写，写 imageRepos 会被 Docker 直接拒绝
+          IMAGE=imagerepos:latest
+
+          docker version --format '  Docker {{.Server.Version}}'
+
           for arch in amd64 arm64; do
-            docker build --build-arg TARGETARCH=$arch -t imageRepos:latest .
-            docker save imageRepos:latest | gzip -9 > dist/imageRepos-docker-$arch.tar.gz
+            echo "=== 构建 $arch ==="
+            docker build --progress=plain --build-arg ARCH=$arch -t "$IMAGE" .
+            docker save "$IMAGE" | gzip -9 > "dist/imageRepos-docker-$arch.tar.gz"
             echo "已打包 imageRepos-docker-$arch.tar.gz"
           done
           ls -lh dist/

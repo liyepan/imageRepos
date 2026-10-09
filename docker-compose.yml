@@ -9,7 +9,7 @@
 
 services:
   imageRepos:
-    image: imageRepos:latest
+    image: imagerepos:latest
     container_name: imageRepos
     restart: unless-stopped
 
