@@ -1,9 +1,26 @@
 # imageRepos
 
-一个只给自己用的图床。**单个可执行文件，零依赖，图片存在本地目录。**
+自托管的个人图床。**单个可执行文件、零第三方依赖、图片就存在你自己的目录里。**
 
-**为什么不用现成的？** 因为你写 WordPress 的真实流程是「截图 → 切浏览器 → 上传 → 复制链接 → 回编辑器」。
-这个工具把它变成：**截图 → `⌘V` → 回编辑器直接粘 URL**。
+上传后直接拿到直链，粘进 WordPress、Markdown 或任何编辑器就能用。
+网页端支持 `⌘V` 粘贴截图，URL 自动进剪贴板 —— 从截图到贴进文章，全程不用碰文件管理器。
+
+---
+
+## 目录
+
+- [特点](#特点)
+- [安装](#安装)
+- [跑起来](#跑起来)
+- [常驻运行（systemd）](#常驻运行systemd)
+- [挂域名和 HTTPS](#挂域名和-https可选)
+- [在 WordPress / Markdown 里用](#在-wordpress--markdown-里用)
+- [对接上传工具](#对接上传工具)
+- [HTTP 接口](#http-接口)
+- [环境变量](#环境变量)
+- [数据与备份](#数据与备份)
+- [开发](#开发)
+- [已知限制](#已知限制)
 
 ---
 
@@ -18,115 +35,141 @@
 - **图片自动去重** —— 同一张图传两次只存一份
 - **只认 magic bytes** —— 把 PHP 改名成 `.png` 也传不上去
 
-编译出来约 7 MB，跑起来内存占用 20 MB 上下。前端打包在二进制里，所以运行时目录里只有那一个文件。
+编译出来约 7 MB，运行内存 20 MB 上下。前端打包在二进制里，运行时只需要那一个文件。
 
 ---
 
-## 一、在本机跑（macOS）
+## 安装
 
-不用装 Go，`dist/` 里已经有编译好的二进制：
+三种方式，挑一种。
 
-```bash
+### 先确认你该下哪个文件
+
+```bashuname -sm
+```
+| `uname -sm` 输出 | 下载 |
+|---|---|
+| `Linux x86_64` | `imageRepos-linux-amd64` |
+| `Linux aarch64` | `imageRepos-linux-arm64` |
+| `Darwin arm64` | `imageRepos-darwin-arm64`（Apple Silicon） |
+| `Darwin x86_64` | `imageRepos-darwin-amd64`（Intel Mac） |
+| Windows | 暂不支持 |
+
+所有文件都在 [Releases](../../releases) 页，附 `SHA256SUMS` 可校验。
+
+### 方式一：下载二进制直接跑（最快）
+
+不需要 Go、不需要 Docker、不需要 root。
+
+```bashchmod +x imageRepos-linux-amd64
+PASSWORD=你的密码 ./imageRepos-linux-amd64
+```
+打开 <http://localhost:8080> 就是界面。
+
+### 方式二：Docker
+
+发行包里有两个架构的镜像 tar，**不需要联网拉任何 registry**（镜像是 `scratch` 基础，全部内容都在 tar 里）。
+
+```bashuname -m
+#   x86_64  → 用 docker-amd64 那个
+#   aarch64 → 用 docker-arm64 那个
+
+docker load -i imageRepos-docker-amd64.tar.gz
+```
+然后把发行包里的 `docker-compose.yml` 放到同一目录，改掉里面的 `PASSWORD`，启动：
+
+```bashdocker compose up -d
+```
+> 如果启动报 `exec format error`，说明下成了另一个架构的包，换一个重新 `docker load` 即可
+> （两个包共用 `imagerepos:latest` 这个 tag，后 load 的会覆盖前面的）。
+
+### 方式三：从源码构建
+
+需要 Go 1.22 或更高。
+
+```bashgit clone <这个仓库的地址>
 cd imageRepos
-PASSWORD=你的密码 ./dist/imageRepos-darwin-arm64
+./build.sh          # 交叉编译出四个平台的二进制，放在 dist/
 ```
+---
 
-打开 <http://localhost:8080>，输入密码登录，然后直接把截图 `⌘V` 粘进页面。
+## 跑起来
 
-数据（图片 + 索引）默认写在当前目录的 `data/` 下。想换地方就加 `DATA_DIR`：
+最小启动只需要一个环境变量：
 
-```bash
-PASSWORD=你的密码 DATA_DIR=~/Pictures/imageRepos ./dist/imageRepos-darwin-arm64
+```bashPASSWORD=你的密码 ./imageRepos-linux-amd64
 ```
+默认行为：
 
-第一次启动时终端会打印一个 API Token，也可以在网页右上角的「API Token」按钮里看。
+| | |
+|---|---|
+| 监听 | `:8080` |
+| 数据目录 | `./data`（图片在 `./data/files/`） |
+| 单文件上限 | 20 MB |
+
+想改数据目录：
+
+```bashPASSWORD=你的密码 DATA_DIR=/your/data/path ./imageRepos-linux-amd64
+```
+首次启动终端会打印一个 API Token，之后也可以在网页右上角的「API Token」按钮里查看。
 
 ---
 
-## 二、放到服务器上跑
+## 常驻运行（systemd）
 
-### 1. 传二进制
+把二进制放到标准位置，数据放到 `/var/lib`：
 
-先确认服务器架构：
-
-```bash
-uname -m
-#   x86_64  → 用 imageRepos-linux-amd64
-#   aarch64 → 用 imageRepos-linux-arm64
+```bashsudo install -m 755 imageRepos-linux-amd64 /usr/local/bin/imageRepos
+sudo mkdir -p /var/lib/imageRepos
+sudo chown 运行用户 /var/lib/imageRepos      # 换成实际跑这个服务的用户
 ```
+新建 `/etc/systemd/system/imageRepos.service`：
 
-```bash
-scp dist/imageRepos-linux-amd64 你的用户名@服务器IP:~/
-```
-
-### 2. 建数据目录并试跑
-
-```bash
-mkdir -p ~/imageRepos-data
-PASSWORD=你的密码 DATA_DIR=~/imageRepos-data ~/imageRepos-linux-amd64
-```
-
-能起来、能打开 `http://服务器IP:8080` 就说明没问题，`Ctrl+C` 停掉。
-
-### 3. 用 systemd 常驻
-
-写一个 unit 文件 `/etc/systemd/system/imageRepos.service`：
-
-```ini
-[Unit]
-Description=imageRepos 图床
+```ini[Unit]
+Description=imageRepos
 After=network.target
 
 [Service]
 Type=simple
-User=你的用户名
-Environment=PASSWORD=你的密码
-Environment=DATA_DIR=/home/你的用户名/imageRepos-data
-Environment=PUBLIC_BASE=https://img.example.com
-ExecStart=/home/你的用户名/imageRepos-linux-amd64
+User=运行用户
+Environment=PASSWORD=换成你的密码
+Environment=DATA_DIR=/var/lib/imageRepos
+Environment=ADDR=127.0.0.1:8080
+# Environment=PUBLIC_BASE=https://img.example.com
+ExecStart=/usr/local/bin/imageRepos
 Restart=always
 RestartSec=3
 
 [Install]
 WantedBy=multi-user.target
 ```
-
-```bash
-sudo chmod 600 /etc/systemd/system/imageRepos.service   # 里面有密码
+```bashsudo chmod 600 /etc/systemd/system/imageRepos.service    # 里面有密码
 sudo systemctl daemon-reload
 sudo systemctl enable --now imageRepos
 sudo systemctl status imageRepos
 ```
+看日志：
 
-看实时日志：
-
-```bash
-journalctl -u imageRepos -f
+```bashjournalctl -u imageRepos -f
 ```
+升级就是换掉 `/usr/local/bin/imageRepos` 然后 `sudo systemctl restart imageRepos`。
 
-以后换新版本就是：传新二进制上去 → `sudo systemctl restart imageRepos`。
-
-> 程序不监听外网也行，把 `[Service]` 里加一句 `Environment=ADDR=127.0.0.1:8080`，
-> 只让本机的 Nginx/Caddy 反代进来，更安全。
+> 上面把 `ADDR` 设成 `127.0.0.1:8080`，只监听本机，由反向代理对外。
+> 想直接暴露端口就改成 `:8080`。
 
 ---
 
-## 三、挂域名和 HTTPS（可选）
+## 挂域名和 HTTPS（可选）
 
-你多半已经有 Nginx 或 Caddy 了，加个反代就行。
+**Caddy**（自动申请证书，最省事）：
 
-**Caddy**（自动签证书，最省事）：
-
-```
-img.example.com {
+```img.example.com {
     reverse_proxy 127.0.0.1:8080
 }
 ```
-
 **Nginx**：
 
-```nginx
-server {
+```nginxserver {
     listen 443 ssl http2;
     server_name img.example.com;
 
@@ -144,42 +187,37 @@ server {
     }
 }
 ```
-
-`X-Forwarded-Proto` 和 `Host` 要传，程序靠它们推断外链地址、决定 Cookie 要不要加 `Secure`。
-挂了域名之后，建议把 `PUBLIC_BASE` 显式设上（例如 `https://img.example.com`），这样外链地址不依赖请求头。
+`Host` 和 `X-Forwarded-Proto` 要传：程序靠它们推断外链地址、决定 Cookie 要不要加 `Secure`。
+挂了域名之后建议把 `PUBLIC_BASE` 显式设上，这样外链地址不依赖请求头。
 
 ---
 
-## 四、在 WordPress 里用
+## 在 WordPress / Markdown 里用
 
-1. 图床里粘贴 / 拖拽上传
+1. 图床里粘贴或拖拽上传
 2. URL 自动进剪贴板
 3. WordPress 编辑器加「图片」区块 → **从 URL 插入** → 粘贴 → 回车
 
-不需要任何插件。图片走你自己的域名。
+不需要任何插件。Markdown 同理，用返回的 `markdown` 字段即可。
 
 ---
 
-## 五、对接各种上传工具
+## 对接上传工具
 
-先在网页右上角点「API Token」拿到 Token。假设你的图床是 `https://img.example.com`。
+先在网页右上角点「API Token」拿到 Token。下面假设你的图床是 `https://img.example.com`。
 
 ### curl
 
-```bash
-curl -F "file=@photo.jpg" \
+```bashcurl -F "file=@photo.jpg" \
      -H "Authorization: Bearer 你的Token" \
      https://img.example.com/api/upload
 ```
-
 只要 URL 纯文本：
 
-```bash
-curl -s -F "file=@photo.jpg" \
+```bashcurl -s -F "file=@photo.jpg" \
      -H "Authorization: Bearer 你的Token" \
      "https://img.example.com/api/upload?format=text"
 ```
-
 ### PicGo
 
 装 **web-uploader**（自定义 Web 图床）插件，配置：
@@ -195,37 +233,37 @@ curl -s -F "file=@photo.jpg" \
 
 目标 → 自定义上传器：
 
-- 请求 URL：`https://img.example.com/api/upload`
-- 方法：`POST`
-- 请求头：`Authorization: Bearer 你的Token`
-- 表单字段：`file`
-- 响应 URL：`$json:url$`
+| 字段 | 值 |
+|---|---|
+| 请求 URL | `https://img.example.com/api/upload` |
+| 方法 | `POST` |
+| 请求头 | `Authorization: Bearer 你的Token` |
+| 表单字段 | `file` |
+| 响应 URL | `$json:url$` |
 
 ### Typora
 
-图像 → 上传服务选 **PicGo**；或者用自定义命令：
+图像 → 上传服务选 **PicGo**；或使用自定义命令：
 
-```bash
-curl -s -F "file=@$1" -H "Authorization: Bearer 你的Token" "https://img.example.com/api/upload?format=text"
+```bashcurl -s -F "file=@$1" -H "Authorization: Bearer 你的Token" "https://img.example.com/api/upload?format=text"
 ```
-
 ### uPic / iPic 等
 
 选「自定义」图床，方法 `POST`，字段名 `file`，加一个 `Authorization` 请求头。
 
 ---
 
-## 六、HTTP 接口
+## HTTP 接口
 
 | 方法 | 路径 | 鉴权 | 说明 |
 |---|---|---|---|
 | `GET` | `/` | 登录 Cookie | 网页主界面 |
 | `GET` | `/login` | 无 | 登录页 |
-| `GET` | `/i/{文件名}` | 无 | 取图片，带一年强缓存 |
+| `GET` | `/i/{文件名}` | **无** | 取图片，带一年强缓存 |
 | `GET` | `/healthz` | 无 | 健康检查，返回 `ok` |
 | `POST` | `/api/login` | 无 | 登录，body `{"password":"..."}` |
 | `POST` | `/api/logout` | 无 | 退出 |
-| `GET` | `/api/token` | **仅登录 Cookie** | 查看 API Token |
+| `GET` | `/api/token` | 仅登录 Cookie | 查看 API Token |
 | `GET` | `/api/list?q=&page=&size=` | 登录或 Token | 图片列表、搜索 |
 | `POST` | `/api/upload` | 登录或 Token | 上传 |
 | `POST` | `/api/delete` | 登录或 Token | 删除，参数 `name` |
@@ -234,8 +272,7 @@ Token 可以放三个地方，任选其一：`Authorization: Bearer xxx`、`X-Ap
 
 **上传接口三种用法**：
 
-```bash
-# 1. multipart，字段名 file（也接受 files / image）
+```bash# 1. multipart，字段名 file（也接受 files / image）
 curl -F "file=@a.png" -H "Authorization: Bearer $TOKEN" .../api/upload
 
 # 2. 裸 body，直接把图片字节当请求体
@@ -245,11 +282,9 @@ curl --data-binary @a.png -H "Content-Type: image/png" \
 # 3. 只要 URL 文本
 curl -F "file=@a.png" -H "Authorization: Bearer $TOKEN" ".../api/upload?format=text"
 ```
-
 **返回**（第一张的字段同时提到顶层，PicGo 直接取 `url` 就行）：
 
-```json
-{
+```json{
   "success": true,
   "count": 1,
   "url": "https://img.example.com/i/shot-88a7ac71.png",
@@ -265,10 +300,12 @@ curl -F "file=@a.png" -H "Authorization: Bearer $TOKEN" ".../api/upload?format=t
   "files": [ { "...": "多文件时这里是全部结果" } ]
 }
 ```
+> `/i/{文件名}` 是**公开无鉴权**的，任何人拿到 URL 就能访问，这是它作为图床直链的前提。
+> 所以别把不打算公开的东西传上来 —— 详情见[已知限制](#已知限制)。
 
 ---
 
-## 七、环境变量
+## 环境变量
 
 | 变量 | 默认值 | 说明 |
 |---|---|---|
@@ -281,38 +318,33 @@ curl -F "file=@a.png" -H "Authorization: Bearer $TOKEN" ".../api/upload?format=t
 
 ---
 
-## 八、数据与备份
+## 数据与备份
 
-```
-DATA_DIR/
+```DATA_DIR/
 ├── files/            ← 图片本体，文件名形如 shot-88a7ac71.png
-├── index.json        ← 元数据（原始文件名、尺寸、哈希、时间）
+├── index.json        ← 元数据（原始文件名、尺寸、哈希、上传时间）
 ├── .secret           ← 会话签名密钥（自动生成）
 └── .apitoken         ← API Token（自动生成）
 ```
+**备份就是打包这一个目录**：
 
-**备份 = 打包这一个目录**：
-
-```bash
-tar czf imageRepos-backup-$(date +%F).tar.gz -C ~/imageRepos-data .
+```bashtar czf imageRepos-backup-$(date +%F).tar.gz -C /your/data/path .
 ```
-
-索引是纯文本 JSON，能直接看、直接 grep，坏了也能手工修。
+`index.json` 是纯文本，可以直接看、直接 grep，坏了也能手工修。
 
 文件名里的 `-88a7ac71` 是内容哈希的前 8 位，所以同一个文件重复上传会复用同一个 URL，不占两份空间。
 
-> `.gitignore` 已经把 `data/` 和 `dist/data/` 排除掉了 —— 里面有密钥，别提交进版本库。
+> `.secret` 和 `.apitoken` 是密钥，别提交进版本库，也别进备份的公开位置。
+> 仓库自带的 `.gitignore` 已经排除了 `data/` 和 `dist/data/`。
 
 ---
 
-## 九、改代码
+## 开发
 
-```bash
-./build.sh          # 交叉编译 linux/amd64、linux/arm64、darwin/arm64、darwin/amd64
+```bash./build.sh          # 交叉编译 linux/amd64、linux/arm64、darwin/arm64、darwin/amd64
 ./e2e-test.sh       # 端到端回归测试，起临时实例，跑完自动清理
 ```
-
-编译缓存放在项目里的 `.build-cache/`，不往 `~/Library/Caches` 或 `/tmp` 写东西。整个项目零第三方依赖，构建不联网。
+编译缓存放在项目里的 `.build-cache/`，不往 `~/Library/Caches` 或 `/tmp` 写东西。项目零第三方依赖，构建不联网。
 
 代码结构：
 
@@ -326,19 +358,39 @@ tar czf imageRepos-backup-$(date +%F).tar.gz -C ~/imageRepos-data .
 | `web/index.html` | 主界面，原生 JS，无框架 |
 | `web/login.html` | 登录页 |
 
-前端用 `//go:embed` 打进二进制，所以运行只需要那一个可执行文件。
+前端用 `//go:embed` 打进二进制，所以运行时只需要那一个可执行文件。
+
+持续集成在 `.github/workflows/release.yml`：推 `main` 会更新滚动的 `latest` 发行版，推 `v*` 标签会发正式版本，两个架构的 Docker 镜像 tar 都在里面。
 
 ---
 
-## 十、已知限制
+## 已知限制
 
-这些是**故意不做**的，因为需求就是自己用、几百张图：
+这些是**故意不做**的，设计目标是「一个人用、几千张图以内」：
+
+**功能上**
 
 - 没有用户体系、注册、找回密码 —— 只有一个密码
-- 没有配额、限流（除了登录失败 8 次锁 5 分钟）
+- 没有配额和限流（只有登录失败 8 次锁 5 分钟）
 - 没有图片压缩、转码、缩略图、水印 —— 原图原样存
-- 没有相册 / 标签，只有一个平铺列表 + 按文件名搜索
-- 不支持 SVG（能带 JS，有 XSS 风险，故意拒掉）
-- 索引全量载入内存。几百张、几千张都没问题，上十万张该换数据库
-- 上传是把文件读进内存再落盘的，`MAX_MB` 设太大要留意内存
-- **Linux 二进制只做了交叉编译和 `GOOS=linux go vet`，没有在真实 Linux 机器上跑过**
+- 没有相册 / 标签，只有一个平铺列表加按文件名搜索
+- 不支持 SVG（能内嵌 JS，有 XSS 风险，故意拒掉）
+- 不支持 Windows（没有交叉编译 Windows 目标）
+
+**安全上**
+
+- `/i/{文件名}` 公开无鉴权，**URL 即凭证**。拿到 URL 的人就能看图，且永久有效
+- 文件名含内容哈希的前 8 位，所以**对内容已知的图片，URL 是可推导的**
+- 没有「未发布」状态 —— 上传即公开
+- 登录失败锁定是内存态，重启即清空
+- 如果把服务直接暴露在公网，**用一个强密码**是最重要的一件事
+
+**规模上**
+
+- 索引全量载入内存。几千张没问题，上十万张该换数据库
+- 上传是把文件读进内存再落盘，`MAX_MB` 设太大要留意内存
+
+**验证情况**
+
+- macOS (arm64) 与 Linux (aarch64, Debian 13) 已实际运行验证
+- Linux x86_64 已经过交叉编译和 `GOOS=linux go vet`，理论上没问题（静态链接），但没有实机跑过
