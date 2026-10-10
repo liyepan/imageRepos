@@ -45,8 +45,10 @@
 
 ### 先确认你该下哪个文件
 
-```bashuname -sm
+```bash
+uname -sm
 ```
+
 | `uname -sm` 输出 | 下载 |
 |---|---|
 | `Linux x86_64` | `imageRepos-linux-amd64` |
@@ -61,44 +63,72 @@
 
 不需要 Go、不需要 Docker、不需要 root。
 
-```bashchmod +x imageRepos-linux-amd64
+```bash
+chmod +x imageRepos-linux-amd64
 PASSWORD=你的密码 ./imageRepos-linux-amd64
 ```
+
 打开 <http://localhost:8080> 就是界面。
 
 ### 方式二：Docker
 
 发行包里有两个架构的镜像 tar，**不需要联网拉任何 registry**（镜像是 `scratch` 基础，全部内容都在 tar 里）。
 
-```bashuname -m
+```bash
+uname -m
 #   x86_64  → 用 docker-amd64 那个
 #   aarch64 → 用 docker-arm64 那个
 
 docker load -i imageRepos-docker-amd64.tar.gz
 ```
+
 然后把发行包里的 `docker-compose.yml` 放到同一目录，改掉里面的 `PASSWORD`，启动：
 
-```bashdocker compose up -d
+```bash
+docker compose up -d
 ```
-> 如果启动报 `exec format error`，说明下成了另一个架构的包，换一个重新 `docker load` 即可
+
+> **下错架构会怎样**：容器起不来，日志里是 `exec /imageRepos: exec format error`。
+>
+> 更早的判据在 `docker compose up` 的输出里 —— 它会先打一行平台不匹配的警告：
+>
+> ```
+> WARNING: The requested image's platform (linux/arm64) does not match
+>          the detected host platform (linux/amd64/v8)
+> ```
+>
+> 看到这行就是下错包了，换另一个重新 `docker load` 即可
 > （两个包共用 `imagerepos:latest` 这个 tag，后 load 的会覆盖前面的）。
+>
+> 也可以主动核对：
+>
+> ```bash
+> docker image inspect imagerepos:latest --format '{{.Architecture}}'
+> # 应与 uname -m 对应：x86_64 → amd64，aarch64 → arm64
+> ```
 
 ### 方式三：从源码构建
 
 需要 Go 1.22 或更高。
 
-```bashgit clone <这个仓库的地址>
+```bash
+git clone <这个仓库的地址>
 cd imageRepos
-./build.sh          # 交叉编译出四个平台的二进制，放在 dist/
+./build.sh
 ```
+
+`./build.sh` 会交叉编译出四个平台的二进制，放在 `dist/`。
+
 ---
 
 ## 跑起来
 
 最小启动只需要一个环境变量：
 
-```bashPASSWORD=你的密码 ./imageRepos-linux-amd64
+```bash
+PASSWORD=你的密码 ./imageRepos-linux-amd64
 ```
+
 默认行为：
 
 | | |
@@ -109,8 +139,10 @@ cd imageRepos
 
 想改数据目录：
 
-```bashPASSWORD=你的密码 DATA_DIR=/your/data/path ./imageRepos-linux-amd64
+```bash
+PASSWORD=你的密码 DATA_DIR=/your/data/path ./imageRepos-linux-amd64
 ```
+
 首次启动终端会打印一个 API Token，之后也可以在网页右上角的「API Token」按钮里查看。
 
 ---
@@ -119,13 +151,18 @@ cd imageRepos
 
 把二进制放到标准位置，数据放到 `/var/lib`：
 
-```bashsudo install -m 755 imageRepos-linux-amd64 /usr/local/bin/imageRepos
+```bash
+sudo install -m 755 imageRepos-linux-amd64 /usr/local/bin/imageRepos
 sudo mkdir -p /var/lib/imageRepos
-sudo chown 运行用户 /var/lib/imageRepos      # 换成实际跑这个服务的用户
+sudo chown 运行用户 /var/lib/imageRepos
 ```
+
+把 `运行用户` 换成实际跑这个服务的用户。
+
 新建 `/etc/systemd/system/imageRepos.service`：
 
-```ini[Unit]
+```ini
+[Unit]
 Description=imageRepos
 After=network.target
 
@@ -135,7 +172,6 @@ User=运行用户
 Environment=PASSWORD=换成你的密码
 Environment=DATA_DIR=/var/lib/imageRepos
 Environment=ADDR=127.0.0.1:8080
-# Environment=PUBLIC_BASE=https://img.example.com
 ExecStart=/usr/local/bin/imageRepos
 Restart=always
 RestartSec=3
@@ -143,16 +179,21 @@ RestartSec=3
 [Install]
 WantedBy=multi-user.target
 ```
-```bashsudo chmod 600 /etc/systemd/system/imageRepos.service    # 里面有密码
+
+```bash
+sudo chmod 600 /etc/systemd/system/imageRepos.service
 sudo systemctl daemon-reload
 sudo systemctl enable --now imageRepos
 sudo systemctl status imageRepos
 ```
-看日志：
 
-```bashjournalctl -u imageRepos -f
+看实时日志：
+
+```bash
+journalctl -u imageRepos -f
 ```
-升级就是换掉 `/usr/local/bin/imageRepos` 然后 `sudo systemctl restart imageRepos`。
+
+升级就是换掉 `/usr/local/bin/imageRepos`，然后 `sudo systemctl restart imageRepos`。
 
 > 上面把 `ADDR` 设成 `127.0.0.1:8080`，只监听本机，由反向代理对外。
 > 想直接暴露端口就改成 `:8080`。
@@ -163,20 +204,23 @@ sudo systemctl status imageRepos
 
 **Caddy**（自动申请证书，最省事）：
 
-```img.example.com {
+```
+img.example.com {
     reverse_proxy 127.0.0.1:8080
 }
 ```
+
 **Nginx**：
 
-```nginxserver {
+```nginx
+server {
     listen 443 ssl http2;
     server_name img.example.com;
 
     ssl_certificate     /path/fullchain.pem;
     ssl_certificate_key /path/privkey.pem;
 
-    client_max_body_size 30m;        # 要大于 MAX_MB，否则大图会被 Nginx 先挡掉
+    client_max_body_size 30m;
 
     location / {
         proxy_pass http://127.0.0.1:8080;
@@ -187,6 +231,9 @@ sudo systemctl status imageRepos
     }
 }
 ```
+
+`client_max_body_size` 要大于 `MAX_MB`，否则大图会被 Nginx 先挡掉。
+
 `Host` 和 `X-Forwarded-Proto` 要传：程序靠它们推断外链地址、决定 Cookie 要不要加 `Secure`。
 挂了域名之后建议把 `PUBLIC_BASE` 显式设上，这样外链地址不依赖请求头。
 
@@ -198,7 +245,7 @@ sudo systemctl status imageRepos
 2. URL 自动进剪贴板
 3. WordPress 编辑器加「图片」区块 → **从 URL 插入** → 粘贴 → 回车
 
-不需要任何插件。Markdown 同理，用返回的 `markdown` 字段即可。
+不需要任何插件。Markdown 同理，用接口返回的 `markdown` 字段即可。
 
 ---
 
@@ -208,16 +255,20 @@ sudo systemctl status imageRepos
 
 ### curl
 
-```bashcurl -F "file=@photo.jpg" \
+```bash
+curl -F "file=@photo.jpg" \
      -H "Authorization: Bearer 你的Token" \
      https://img.example.com/api/upload
 ```
+
 只要 URL 纯文本：
 
-```bashcurl -s -F "file=@photo.jpg" \
+```bash
+curl -s -F "file=@photo.jpg" \
      -H "Authorization: Bearer 你的Token" \
      "https://img.example.com/api/upload?format=text"
 ```
+
 ### PicGo
 
 装 **web-uploader**（自定义 Web 图床）插件，配置：
@@ -245,8 +296,10 @@ sudo systemctl status imageRepos
 
 图像 → 上传服务选 **PicGo**；或使用自定义命令：
 
-```bashcurl -s -F "file=@$1" -H "Authorization: Bearer 你的Token" "https://img.example.com/api/upload?format=text"
+```bash
+curl -s -F "file=@$1" -H "Authorization: Bearer 你的Token" "https://img.example.com/api/upload?format=text"
 ```
+
 ### uPic / iPic 等
 
 选「自定义」图床，方法 `POST`，字段名 `file`，加一个 `Authorization` 请求头。
@@ -272,7 +325,8 @@ Token 可以放三个地方，任选其一：`Authorization: Bearer xxx`、`X-Ap
 
 **上传接口三种用法**：
 
-```bash# 1. multipart，字段名 file（也接受 files / image）
+```bash
+# 1. multipart，字段名 file（也接受 files / image）
 curl -F "file=@a.png" -H "Authorization: Bearer $TOKEN" .../api/upload
 
 # 2. 裸 body，直接把图片字节当请求体
@@ -282,9 +336,11 @@ curl --data-binary @a.png -H "Content-Type: image/png" \
 # 3. 只要 URL 文本
 curl -F "file=@a.png" -H "Authorization: Bearer $TOKEN" ".../api/upload?format=text"
 ```
+
 **返回**（第一张的字段同时提到顶层，PicGo 直接取 `url` 就行）：
 
-```json{
+```json
+{
   "success": true,
   "count": 1,
   "url": "https://img.example.com/i/shot-88a7ac71.png",
@@ -300,8 +356,9 @@ curl -F "file=@a.png" -H "Authorization: Bearer $TOKEN" ".../api/upload?format=t
   "files": [ { "...": "多文件时这里是全部结果" } ]
 }
 ```
-> `/i/{文件名}` 是**公开无鉴权**的，任何人拿到 URL 就能访问，这是它作为图床直链的前提。
-> 所以别把不打算公开的东西传上来 —— 详情见[已知限制](#已知限制)。
+
+> `/i/{文件名}` 是**公开无鉴权**的，任何人拿到 URL 就能访问 —— 这是它作为图床直链的前提。
+> 所以别把不打算公开的东西传上来，详见[已知限制](#已知限制)。
 
 ---
 
@@ -320,31 +377,38 @@ curl -F "file=@a.png" -H "Authorization: Bearer $TOKEN" ".../api/upload?format=t
 
 ## 数据与备份
 
-```DATA_DIR/
+```
+DATA_DIR/
 ├── files/            ← 图片本体，文件名形如 shot-88a7ac71.png
 ├── index.json        ← 元数据（原始文件名、尺寸、哈希、上传时间）
 ├── .secret           ← 会话签名密钥（自动生成）
 └── .apitoken         ← API Token（自动生成）
 ```
+
 **备份就是打包这一个目录**：
 
-```bashtar czf imageRepos-backup-$(date +%F).tar.gz -C /your/data/path .
+```bash
+tar czf imageRepos-backup-$(date +%F).tar.gz -C /your/data/path .
 ```
+
 `index.json` 是纯文本，可以直接看、直接 grep，坏了也能手工修。
 
 文件名里的 `-88a7ac71` 是内容哈希的前 8 位，所以同一个文件重复上传会复用同一个 URL，不占两份空间。
 
-> `.secret` 和 `.apitoken` 是密钥，别提交进版本库，也别进备份的公开位置。
-> 仓库自带的 `.gitignore` 已经排除了 `data/` 和 `dist/data/`。
+> `.secret` 和 `.apitoken` 是密钥，别提交进版本库。仓库自带的 `.gitignore`
+> 已经排除了 `data/` 和 `dist/data/`。
 
 ---
 
 ## 开发
 
-```bash./build.sh          # 交叉编译 linux/amd64、linux/arm64、darwin/arm64、darwin/amd64
+```bash
+./build.sh          # 交叉编译 linux/amd64、linux/arm64、darwin/arm64、darwin/amd64
 ./e2e-test.sh       # 端到端回归测试，起临时实例，跑完自动清理
 ```
-编译缓存放在项目里的 `.build-cache/`，不往 `~/Library/Caches` 或 `/tmp` 写东西。项目零第三方依赖，构建不联网。
+
+编译缓存放在项目里的 `.build-cache/`，不往 `~/Library/Caches` 或 `/tmp` 写东西。
+项目零第三方依赖，构建不联网。
 
 代码结构：
 
@@ -360,15 +424,16 @@ curl -F "file=@a.png" -H "Authorization: Bearer $TOKEN" ".../api/upload?format=t
 
 前端用 `//go:embed` 打进二进制，所以运行时只需要那一个可执行文件。
 
-持续集成在 `.github/workflows/release.yml`：推 `main` 会更新滚动的 `latest` 发行版，推 `v*` 标签会发正式版本，两个架构的 Docker 镜像 tar 都在里面。
+持续集成在 `.github/workflows/release.yml`：推 `main` 更新滚动的 `latest` 发行版，
+推 `v*` 标签发正式版本，两个架构的 Docker 镜像 tar 都在里面。
 
 ---
 
 ## 已知限制
 
-这些是**故意不做**的，设计目标是「一个人用、几千张图以内」：
+这些是**故意不做**的，设计目标是「一个人用、几千张图以内」。
 
-**功能上**
+### 功能
 
 - 没有用户体系、注册、找回密码 —— 只有一个密码
 - 没有配额和限流（只有登录失败 8 次锁 5 分钟）
@@ -377,20 +442,20 @@ curl -F "file=@a.png" -H "Authorization: Bearer $TOKEN" ".../api/upload?format=t
 - 不支持 SVG（能内嵌 JS，有 XSS 风险，故意拒掉）
 - 不支持 Windows（没有交叉编译 Windows 目标）
 
-**安全上**
+### 安全
 
 - `/i/{文件名}` 公开无鉴权，**URL 即凭证**。拿到 URL 的人就能看图，且永久有效
 - 文件名含内容哈希的前 8 位，所以**对内容已知的图片，URL 是可推导的**
 - 没有「未发布」状态 —— 上传即公开
 - 登录失败锁定是内存态，重启即清空
-- 如果把服务直接暴露在公网，**用一个强密码**是最重要的一件事
+- 如果直接把服务暴露在公网，**用一个强密码**是最重要的一件事
 
-**规模上**
+### 规模
 
 - 索引全量载入内存。几千张没问题，上十万张该换数据库
 - 上传是把文件读进内存再落盘，`MAX_MB` 设太大要留意内存
 
-**验证情况**
+### 验证情况
 
 - macOS (arm64) 与 Linux (aarch64, Debian 13) 已实际运行验证
 - Linux x86_64 已经过交叉编译和 `GOOS=linux go vet`，理论上没问题（静态链接），但没有实机跑过

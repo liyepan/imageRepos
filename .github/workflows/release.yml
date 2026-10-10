@@ -45,7 +45,15 @@ jobs:
 
           for arch in amd64 arm64; do
             echo "=== 构建 $arch ==="
-            docker build --progress=plain --build-arg ARCH=$arch -t "$IMAGE" .
+            # --platform 必须加。不加的话 BuildKit 会把【构建机】的架构写进镜像
+            # config（runner 是 amd64），于是 arm64 包也声称自己是 amd64。
+            # 后果：docker images / inspect 全在撒谎，下错架构根本查不出来。
+            # 这个 Dockerfile 只有 COPY 没有 RUN，构建 arm64 不需要 QEMU。
+            docker build \
+              --platform "linux/$arch" \
+              --progress=plain \
+              --build-arg ARCH=$arch \
+              -t "$IMAGE" .
             docker save "$IMAGE" | gzip -9 > "dist/imageRepos-docker-$arch.tar.gz"
             echo "已打包 imageRepos-docker-$arch.tar.gz"
           done
