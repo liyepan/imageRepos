@@ -17,7 +17,7 @@ COPY dist/imageRepos-linux-${ARCH} /imageRepos
 
 # 兜底的架构标记。正常情况下镜像自身的 architecture 字段就是对的
 # （构建时必须带 --platform），这个标签是第二道保险：
-#   docker image inspect imagerepos:latest --format \'{{index .Config.Labels "com.imagerepos.arch"}}'\
+#   docker image inspect imagerepos:latest --format '{{index .Config.Labels "com.imagerepos.arch"}}'
 LABEL org.opencontainers.image.title="imageRepos" \
       com.imagerepos.arch="${ARCH}"
 
